@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MediTrack — Advanced IoT Biomedical Waste Telemetry & Anti-Tampering Platform</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#F0FDF4',
+              100: '#DCFCE7',
+              500: '#059669',
+              600: '#047857',
+              700: '#065F46',
+              800: '#064E3B',
+              900: '#022C22',
+              accent: '#F97316',
+            },
+            cpcb: {
+              red: '#EF4444',
+              yellow: '#F59E0B',
+              blue: '#3B82F6',
+              white: '#6B7280',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080D1A; color: #F8FAFC; }
+    
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .glass-input {
+      background: rgba(8, 13, 26, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #F8FAFC;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+    
+    #leaflet-map { height: 100%; min-height: 420px; border-radius: 1rem; z-index: 1; }
+
+    .scanner-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #10B981;
+      box-shadow: 0 0 15px #10B981;
+      animation: scan 1.6s infinite ease-in-out;
+    }
+    @keyframes scan {
+      0% { top: 0%; }
+      50% { top: 90%; }
+      100% { top: 0%; }
+    }
+
+    .pulse-ring {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+      animation: pulse-ring 2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+  </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+  <!-- FLOATING TOAST NOTIFICATION -->
+  <div id="toast-success" class="fixed bottom-6 right-6 z-50 flex items-center w-full max-w-sm p-4 rounded-2xl glass-panel shadow-2xl border border-emerald-500/30 text-emerald-400 hidden transition-all duration-300">
+    <div class="inline-flex items-center justify-center flex-shrink-0 w-10 h-10 text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+      <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+    </div>
+    <div class="ml-3 text-xs font-semibold text-slate-200" id="toast-message">Bag Logged Successfully!</div>
+  </div>
+
+  <!-- AUTH / LOGIN OVERLAY -->
+  <div id="auth-screen" class="fixed inset-0 z-50 flex bg-slate-950/95 backdrop-blur-2xl justify-center items-center p-4">
+    <div class="glass-panel rounded-3xl shadow-2xl max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-white/10">
+      <!-- Left Hero Panel -->
+      <div class="bg-gradient-to-br from-emerald-950/80 via-slate-900 to-slate-950 p-8 text-white flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        <div>
+          <div class="flex items-center space-x-3 mb-6">
+            <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center p-1.5 shadow-lg shadow-emerald-500/10">
+              <svg class="w-full h-full text-emerald-400 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12h3l2.5-5 3.5 10 3-7 2 4h6"/>
+              </svg>
+            </div>
+            <div class="flex flex-col">
+              <div class="flex items-baseline tracking-tight">
+                <span class="text-2xl font-bold text-white">Medi</span>
+                <span class="text-2xl font-extrabold text-emerald-400 italic ml-0.5">track</span>
+              </div>
+              <span class="text-[9px] text-slate-400 font-medium tracking-widest uppercase">Smart Segregation System</span>
+            </div>
+          </div>
+          <h2 class="text-3xl font-extrabold leading-tight mb-3 bg-gradient-to-r from-white via-slate-200 to-emerald-400 bg-clip-text text-transparent">Enterprise Medical Waste Telemetry</h2>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            IoT ESP32 integration, CPCB 2016 RFID manifest, real-time weight anti-tampering, geofenced route deviation detection.
+          </p>
+        </div>
+        <div class="mt-8 pt-6 border-t border-white/10 flex justify-between text-xs text-slate-400 font-medium">
+          <span>Smart India Hackathon</span>
+          <span class="text-emerald-400 font-semibold">Healthcare Domain</span>
+        </div>
+      </div>
+
+      <!-- Right Form Panel -->
+      <div class="p-8 flex flex-col justify-center bg-slate-900/40">
+        <h3 class="text-xl font-bold text-white mb-1">System Access Portal</h3>
+        <p class="text-slate-400 text-xs mb-6">Select operational authority to initialize session.</p>
+        
+        <div class="space-y-4 mb-6">
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Operational Role</label>
+            <div class="grid grid-cols-2 gap-2" id="role-selector">
+              <button onclick="selectRole('Ward Staff')" class="role-btn p-3 text-left rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:border-emerald-500/50 transition-all font-medium text-xs">
+                <i data-lucide="user-check" class="w-4 h-4 mb-2 text-emerald-400"></i> Ward Staff
+              </button>
+              <button onclick="selectRole('Collector / Driver')" class="role-btn p-3 text-left rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:border-emerald-500/50 transition-all font-medium text-xs">
+                <i data-lucide="truck" class="w-4 h-4 mb-2 text-emerald-400"></i> Driver / Collector
+              </button>
+              <button onclick="selectRole('Hospital Admin')" class="role-btn active p-3 text-left rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-400 font-medium text-xs">
+                <i data-lucide="building-2" class="w-4 h-4 mb-2 text-emerald-400"></i> Hospital Admin
+              </button>
+              <button onclick="selectRole('CPCB Regulator')" class="role-btn p-3 text-left rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:border-emerald-500/50 transition-all font-medium text-xs">
+                <i data-lucide="file-check-2" class="w-4 h-4 mb-2 text-emerald-400"></i> SPCB Regulator
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Facility Identification ID</label>
+            <input type="text" value="AIIMS-BHOPAL-8942" class="w-full text-xs px-3 py-2.5 rounded-xl glass-input focus:outline-none focus:border-emerald-500 transition-all" />
+          </div>
+        </div>
+
+        <button onclick="login()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm">
+          <span>Authenticate Node</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERSISTENT SIDEBAR -->
+  <aside class="w-64 bg-slate-900/80 backdrop-blur-2xl flex flex-col justify-between hidden md:flex z-20 border-r border-white/10">
+    <div>
+      <!-- SIDEBAR BRAND LOGO HEADER -->
+      <div class="h-20 flex items-center px-6 border-b border-white/10">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center p-1.5 shadow-md shadow-emerald-500/10">
+            <svg class="w-full h-full text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12h3l2.5-5 3.5 10 3-7 2 4h6"/>
+            </svg>
+          </div>
+          <div class="flex flex-col">
+            <div class="flex items-baseline leading-none">
+              <span class="text-xl font-bold text-white">Medi</span>
+              <span class="text-xl font-extrabold text-emerald-400 italic ml-0.5">track</span>
+            </div>
+            <span class="text-[9px] text-emerald-400/80 font-semibold tracking-wider uppercase mt-1">
+              CPCB Sync Active
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- NAV LINKS -->
+      <nav class="p-4 space-y-1.5">
+        <button onclick="switchTab('compliance')" class="nav-item active w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/10">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Dashboard & Manifest</span>
+        </button>
+        <button onclick="switchTab('scan')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white">
+          <i data-lucide="qr-code" class="w-4 h-4"></i>
+          <span>Scan & Tag Bag</span>
+        </button>
+        <button onclick="switchTab('handover')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white">
+          <i data-lucide="scale" class="w-4 h-4"></i>
+          <span>Handover Verification</span>
+        </button>
+        <button onclick="switchTab('tracking')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white">
+          <i data-lucide="map" class="w-4 h-4"></i>
+          <span>Live Vehicle GPS</span>
+        </button>
+        <button onclick="switchTab('bins')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Smart Bin Fleet</span>
+        </button>
+        <button onclick="switchTab('alerts')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white relative">
+          <i data-lucide="shield-alert" class="w-4 h-4"></i>
+          <span class="flex-1 text-left">Safety & Anti-Theft</span>
+          <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        </button>
+        <button onclick="switchTab('analytics')" class="nav-item w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-slate-400 hover:text-white">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>AI Analytics</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="p-4 border-t border-white/10 bg-slate-950/40">
+      <div class="flex items-center space-x-3 mb-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xs" id="user-avatar">HA</div>
+        <div class="overflow-hidden">
+          <p class="text-xs font-semibold text-white truncate" id="user-name">Dr. A. Sharma</p>
+          <p class="text-[10px] text-slate-400 truncate" id="user-role-label">Hospital Admin</p>
+        </div>
+      </div>
+      <button onclick="logout()" class="w-full flex items-center justify-center space-x-2 py-2 glass-card rounded-xl text-[11px] font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+        <span>Switch Account</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT AREA -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950 relative">
+    <!-- BACKGROUND GLOWS -->
+    <div class="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+    <header class="h-20 border-b border-white/10 flex items-center justify-between px-8 z-10 glass-panel">
+      <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3 text-xs">
+          <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-ring"></div>
+          <span class="font-bold text-white text-sm">AIIMS Regional Medical Center</span>
+          <span class="text-slate-600">|</span>
+          <span class="bg-emerald-500/10 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full border border-emerald-500/20 font-mono">ESP32 LOCAL BUFFER: SYNCED</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <button onclick="triggerSoundAlert()" title="Test Alert Signal" class="relative p-2.5 rounded-xl glass-card text-slate-300 hover:text-white transition-all">
+          <i data-lucide="bell" class="w-4 h-4 text-emerald-400"></i>
+          <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400"></span>
+        </button>
+        <div class="glass-card text-emerald-400 px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-emerald-500/20 flex items-center space-x-2">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          <span id="current-role-badge">Hospital Admin</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTENT BODY -->
+    <div class="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar relative z-10">
+
+      <!-- PAGE 1: COMPLIANCE DASHBOARD -->
+      <section id="page-compliance" class="page-content space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">CPCB Digital Waste Manifest & Audit Log</h2>
+            <p class="text-xs text-slate-400 mt-1">Rule 2016 automated barcode/RFID manifest logs with weight tamper-detection</p>
+          </div>
+          <button onclick="downloadManifestPDF()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-4 py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center space-x-2">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Export CPCB Form-IV PDF</span>
+          </button>
+        </div>
+
+        <!-- STATS GRID -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-emerald-500 space-y-2">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Today's Total Waste</p>
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-white" id="total-waste-weight">348.5</span>
+              <span class="text-xs font-semibold text-emerald-400">kg</span>
+            </div>
+            <p class="text-[10px] text-slate-400">↑ 12% vs yesterday average</p>
+          </div>
+
+          <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-red-500 space-y-2">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Red Category (Infectious)</p>
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-white">142.0</span>
+              <span class="text-xs font-semibold text-red-400">kg</span>
+            </div>
+            <p class="text-[10px] text-slate-400">40.7% total volume</p>
+          </div>
+
+          <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-amber-500 space-y-2">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Yellow (Anatomical)</p>
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-white">118.2</span>
+              <span class="text-xs font-semibold text-amber-400">kg</span>
+            </div>
+            <p class="text-[10px] text-slate-400">33.9% total volume</p>
+          </div>
+
+          <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-blue-500 space-y-2">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weight Tamper Audit</p>
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-emerald-400">0 Alerts</span>
+            </div>
+            <p class="text-[10px] text-slate-400">100% weight match at pickup</p>
+          </div>
+        </div>
+
+        <!-- TABLE SECTION -->
+        <div class="glass-panel rounded-2xl overflow-hidden border border-white/10">
+          <div class="p-5 border-b border-white/10 flex items-center justify-between">
+            <h3 class="font-bold text-white text-sm">Real-time Verified Pickups</h3>
+            <span class="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20">LIVE ESP32 FEED ACTIVE</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-white/5 border-b border-white/10 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th class="p-4">Bag ID / RFID Tag</th>
+                  <th class="p-4">Ward Origin</th>
+                  <th class="p-4">CPCB Category</th>
+                  <th class="p-4">Ward Weight</th>
+                  <th class="p-4">Van Handover Weight</th>
+                  <th class="p-4">Verification Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5 text-xs text-slate-300 font-medium" id="pickup-table-body">
+                <tr class="hover:bg-white/5 transition-all">
+                  <td class="p-4 font-mono font-bold text-white">#CPCB-8923-RED</td>
+                  <td class="p-4">ICU Block - Floor 2</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">RED (Infectious)</span></td>
+                  <td class="p-4 font-bold text-white">4.85 kg</td>
+                  <td class="p-4 font-bold text-emerald-400">4.85 kg</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified (0% Var)</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE 2: SCAN & TAG WASTE -->
+      <section id="page-scan" class="page-content hidden max-w-xl mx-auto space-y-6">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-bold text-white">Scan & RFID Tag Bag</h2>
+          <p class="text-xs text-slate-400">Ward Staff Mobile Interface for Bag Registration</p>
+        </div>
+
+        <div class="glass-panel p-6 rounded-3xl text-center border border-white/10">
+          <div id="scanner-box" class="border-2 border-dashed border-emerald-500/30 rounded-2xl p-8 bg-emerald-500/5 flex flex-col items-center justify-center relative overflow-hidden">
+            <div id="scan-line" class="scanner-line hidden"></div>
+            <div class="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
+              <i data-lucide="qr-code" class="w-10 h-10"></i>
+            </div>
+            <p class="font-bold text-white text-sm mb-1">Align QR Code or RFID Chip in Camera View</p>
+            <p class="text-[10px] text-slate-400 mb-6">Supported tags: CPCB-RFID Standard, ISO/IEC 18000-6C</p>
+            
+            <button onclick="simulateScan()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center space-x-2">
+              <i data-lucide="camera" class="w-4 h-4"></i>
+              <span>Simulate RFID Tag Scan</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="scan-result" class="glass-panel rounded-2xl border border-white/10 overflow-hidden transition-all opacity-40 pointer-events-none">
+          <div class="bg-white/5 px-6 py-3 border-b border-white/10 flex items-center justify-between">
+            <span class="text-[10px] font-mono tracking-wider uppercase text-slate-400">Tag Detected</span>
+            <span class="text-xs font-mono font-bold text-emerald-400" id="tag-id">#TAG-PENDING</span>
+          </div>
+          
+          <div class="p-6 space-y-4">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">CPCB Category Segregation</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button onclick="setCategory(this, 'Red')" class="cat-btn p-3 rounded-xl border border-red-500/50 bg-red-500/20 text-red-400 font-bold text-xs flex flex-col items-center">
+                  <span>RED</span><span class="text-[8px] font-normal text-slate-300">Infectious</span>
+                </button>
+                <button onclick="setCategory(this, 'Yellow')" class="cat-btn p-3 rounded-xl border border-white/10 bg-white/5 text-slate-400 font-bold text-xs flex flex-col items-center hover:border-amber-500/50">
+                  <span>YELLOW</span><span class="text-[8px] font-normal text-slate-400">Anatomical</span>
+                </button>
+                <button onclick="setCategory(this, 'Blue')" class="cat-btn p-3 rounded-xl border border-white/10 bg-white/5 text-slate-400 font-bold text-xs flex flex-col items-center hover:border-blue-500/50">
+                  <span>BLUE</span><span class="text-[8px] font-normal text-slate-400">Glassware</span>
+                </button>
+                <button onclick="setCategory(this, 'White')" class="cat-btn p-3 rounded-xl border border-white/10 bg-white/5 text-slate-400 font-bold text-xs flex flex-col items-center hover:border-slate-500/50">
+                  <span>WHITE</span><span class="text-[8px] font-normal text-slate-400">Sharps</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Ward Scale Weight (kg)</label>
+                <input type="number" id="scan-weight" value="4.25" step="0.01" class="w-full text-sm font-bold glass-input px-3 py-2 rounded-xl" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">Ward Location</label>
+                <select id="scan-ward" class="w-full text-xs glass-input px-3 py-2 rounded-xl">
+                  <option class="bg-slate-900">ICU - Block B</option>
+                  <option class="bg-slate-900">Surgical Ward 3</option>
+                  <option class="bg-slate-900">Emergency Room</option>
+                </select>
+              </div>
+            </div>
+
+            <button onclick="confirmLog()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 text-xs">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span>Confirm & Sync Manifest</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE 3: HANDOVER & WEIGHT DISCREPANCY AUDIT -->
+      <section id="page-handover" class="page-content hidden max-w-xl mx-auto space-y-6">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-bold text-white">Handover Weight Verification</h2>
+          <p class="text-xs text-slate-400">Anti-Theft & Discrepancy Check during Van Collection</p>
+        </div>
+
+        <div class="glass-panel p-6 rounded-3xl space-y-4 border border-white/10">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Select Bag Tag ID</label>
+            <input type="text" id="handover-tag-id" value="#CPCB-8923-RED" class="w-full text-xs font-mono font-bold glass-input px-3 py-2.5 rounded-xl" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Logged Ward Weight</label>
+              <input type="text" value="4.85 kg" disabled class="w-full text-xs font-bold glass-input px-3 py-2.5 rounded-xl opacity-60" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Van Scale Weight (kg)</label>
+              <input type="number" id="handover-van-weight" value="3.90" step="0.01" class="w-full text-xs font-bold glass-input px-3 py-2.5 rounded-xl" />
+            </div>
+          </div>
+
+          <button onclick="verifyHandover()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center space-x-2 text-xs">
+            <i data-lucide="shield-alert" class="w-4 h-4"></i>
+            <span>Run Weight Discrepancy Check</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- PAGE 4: LIVE INTERACTIVE MAP -->
+      <section id="page-tracking" class="page-content hidden space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Live Vehicle GPS Fleet & Geofence</h2>
+            <p class="text-xs text-slate-400 mt-1">Real-time route telemetry and geofence deviation detection</p>
+          </div>
+          <span class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full font-mono border border-emerald-500/20 flex items-center space-x-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>GEOFENCE MONITOR: ACTIVE</span>
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 glass-panel rounded-2xl border border-white/10 p-2 relative min-h-[420px] overflow-hidden">
+            <div id="leaflet-map"></div>
+          </div>
+
+          <div class="glass-panel rounded-2xl border border-white/10 p-5 space-y-4">
+            <h3 class="font-bold text-white text-sm flex items-center justify-between">
+              <span>Collection Fleet</span>
+              <span class="text-[10px] bg-white/10 px-2 py-0.5 rounded text-slate-300">3 Vans Active</span>
+            </h3>
+
+            <div class="space-y-3">
+              <div class="p-3 glass-card rounded-xl border border-white/5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <p class="text-xs font-bold text-white">Van #MH-04-EV-8821</p>
+                  <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">68% Capacity</span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-1.5">
+                  <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 68%"></div>
+                </div>
+                <p class="text-[10px] text-slate-400">Driver: R. Verma • On Authorized Route</p>
+              </div>
+
+              <div class="p-3 glass-card rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <p class="text-xs font-bold text-white">Van #MH-04-EV-9010</p>
+                  <span class="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">ROUTE DEVIATION</span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-1.5">
+                  <div class="bg-amber-500 h-1.5 rounded-full" style="width: 82%"></div>
+                </div>
+                <p class="text-[10px] text-amber-400/90">Driver: Sunita P. • 1.2 km outside Geofence</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE 5: BINS -->
+      <section id="page-bins" class="page-content hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">Smart IoT Waste Bins</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="glass-panel rounded-2xl border border-white/10 p-5 space-y-4 border-l-4 border-l-red-500">
+            <div class="flex justify-between items-start">
+              <div>
+                <span class="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">Red Category</span>
+                <h3 class="font-bold text-white text-base mt-1">Bin #ICU-RED-02</h3>
+              </div>
+              <span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-bold animate-pulse">94% FULL</span>
+            </div>
+            <div class="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+              <div class="bg-red-500 h-2 rounded-full" style="width: 94%"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE 6: ALERTS -->
+      <section id="page-alerts" class="page-content hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">Safety & Anti-Theft Alerts</h2>
+        <div class="glass-panel rounded-2xl border border-white/10 p-4 space-y-3">
+          <div class="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start space-x-3">
+            <i data-lucide="shield-alert" class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5"></i>
+            <div>
+              <h4 class="font-bold text-white text-xs">Weight Leakage / Tampering Warning</h4>
+              <p class="text-[11px] text-slate-400 mt-0.5">Bag #CPCB-8923-RED lost 0.95 kg during transit. Potential illegal dumping or bag puncture.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE 7: ANALYTICS -->
+      <section id="page-analytics" class="page-content hidden space-y-6">
+        <h2 class="text-2xl font-bold text-white">AI Waste Volume Analytics</h2>
+        <div class="glass-panel p-5 rounded-2xl border border-white/10">
+          <div class="h-64 relative">
+            <canvas id="analyticsChart1"></canvas>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- CONTROLLER SCRIPT -->
+  <script>
+    lucide.createIcons();
+
+    let currentRole = "Hospital Admin";
+    let selectedCategory = "Red";
+    let leafletMap = null;
+    let chartInstance = null;
+
+    function showToast(message) {
+      const toast = document.getElementById('toast-success');
+      document.getElementById('toast-message').innerText = message;
+      toast.classList.remove('hidden');
+      setTimeout(() => { toast.classList.add('hidden'); }, 3000);
+    }
+
+    function triggerSoundAlert() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {
+        console.log("Audio signal constrained.");
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
+      
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.remove('bg-emerald-500', 'text-slate-950', 'shadow-md', 'shadow-emerald-500/10');
+        el.classList.add('text-slate-400', 'hover:bg-white/5', 'hover:text-white');
+      });
+
+      const targetPage = document.getElementById(`page-${tabId}`);
+      if (targetPage) targetPage.classList.remove('hidden');
+
+      const activeBtn = event ? event.currentTarget : null;
+      if (activeBtn && activeBtn.classList.contains('nav-item')) {
+        activeBtn.classList.add('bg-emerald-500', 'text-slate-950', 'shadow-md', 'shadow-emerald-500/10');
+        activeBtn.classList.remove('text-slate-400', 'hover:bg-white/5', 'hover:text-white');
+      }
+
+      setTimeout(() => {
+        if (tabId === 'analytics') renderAnalyticsChart();
+        if (tabId === 'tracking') initLeafletMap();
+      }, 50);
+    }
+
+    function initLeafletMap() {
+      if (leafletMap) {
+        leafletMap.invalidateSize();
+        return;
+      }
+      
+      leafletMap = L.map('leaflet-map').setView([23.2065, 77.4585], 14);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors & CartoDB'
+      }).addTo(leafletMap);
+
+      const vanIcon = L.divIcon({
+        html: `<div class="w-8 h-8 rounded-full bg-emerald-500 border-2 border-slate-950 shadow-lg text-slate-950 flex items-center justify-center font-bold text-xs">🚐</div>`,
+        className: ''
+      });
+      L.marker([23.2065, 77.4585], { icon: vanIcon }).addTo(leafletMap)
+        .bindPopup('<b class="text-slate-900">Van #MH-04-EV-8821</b><br>Status: On Route (68% Capacity)')
+        .openPopup();
+    }
+
+    function selectRole(role) {
+      currentRole = role;
+      document.querySelectorAll('.role-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-emerald-500', 'bg-emerald-500/10', 'text-emerald-400');
+        btn.classList.add('border-white/10', 'bg-white/5', 'text-slate-300');
+      });
+      if (event) {
+        event.currentTarget.classList.add('border-emerald-500', 'bg-emerald-500/10', 'text-emerald-400');
+      }
+    }
+
+    function login() {
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('current-role-badge').innerText = currentRole;
+      document.getElementById('user-role-label').innerText = currentRole;
+      showToast(`Logged in as ${currentRole}`);
+    }
+
+    function logout() {
+      document.getElementById('auth-screen').classList.remove('hidden');
+    }
+
+    function simulateScan() {
+      const line = document.getElementById('scan-line');
+      line.classList.remove('hidden');
+
+      setTimeout(() => {
+        line.classList.add('hidden');
+        triggerSoundAlert();
+
+        const tagElem = document.getElementById('tag-id');
+        const randomTag = "TAG-" + Math.floor(100000 + Math.random() * 900000);
+        tagElem.innerText = "#" + randomTag;
+
+        const resultCard = document.getElementById('scan-result');
+        resultCard.classList.remove('opacity-40', 'pointer-events-none');
+        showToast("RFID Tag Scanned Successfully!");
+      }, 1500);
+    }
+
+    function setCategory(btn, cat) {
+      selectedCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(b => {
+        b.classList.remove('border-red-500/50', 'bg-red-500/20', 'text-red-400');
+        b.classList.add('border-white/10', 'bg-white/5', 'text-slate-400');
+      });
+      btn.classList.add('border-red-500/50', 'bg-red-500/20', 'text-red-400');
+      btn.classList.remove('border-white/10', 'bg-white/5', 'text-slate-400');
+    }
+
+    function confirmLog() {
+      const weight = parseFloat(document.getElementById('scan-weight').value) || 0;
+      const ward = document.getElementById('scan-ward').value;
+
+      const tbody = document.getElementById('pickup-table-body');
+      const row = `
+        <tr class="hover:bg-white/5 transition-all">
+          <td class="p-4 font-mono font-bold text-white">#CPCB-${Math.floor(1000+Math.random()*9000)}</td>
+          <td class="p-4">${ward}</td>
+          <td class="p-4"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">${selectedCategory.toUpperCase()}</span></td>
+          <td class="p-4 font-bold text-white">${weight} kg</td>
+          <td class="p-4 font-bold text-emerald-400">${weight} kg</td>
+          <td class="p-4"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified (0% Var)</span></td>
+        </tr>
+      `;
+      tbody.insertAdjacentHTML('afterbegin', row);
+
+      const totalElem = document.getElementById('total-waste-weight');
+      totalElem.innerText = (parseFloat(totalElem.innerText) + weight).toFixed(1);
+
+      showToast("Manifest entry verified and saved!");
+      switchTab('compliance');
+    }
+
+    function verifyHandover() {
+      const vanWeight = parseFloat(document.getElementById('handover-van-weight').value) || 0;
+      const wardWeight = 4.85;
+      const diff = Math.abs(wardWeight - vanWeight);
+
+      triggerSoundAlert();
+      if (diff > 0.2) {
+        showToast("ALERT: Weight Discrepancy > 5% Detected!");
+        switchTab('alerts');
+      } else {
+        showToast("Handover Verified: Zero Weight Leakage.");
+      }
+    }
+
+    function downloadManifestPDF() {
+      showToast("Generating official CPCB Form-IV PDF...");
+    }
+
+    function renderAnalyticsChart() {
+      const ctx = document.getElementById('analyticsChart1');
+      if (!ctx) return;
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          datasets: [
+            { label: 'Red (kg)', data: [65, 59, 80, 81, 56, 55, 70], backgroundColor: '#EF4444' },
+            { label: 'Yellow (kg)', data: [45, 49, 60, 71, 46, 35, 50], backgroundColor: '#F59E0B' }
+          ]
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94A3B8' } }
+          },
+          scales: {
+            x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      switchTab('compliance');
+    });
+  </script>
+</body>
+</html>
